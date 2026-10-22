@@ -55,6 +55,12 @@ shared_bash_read  { "session": "build", "lines": 200 }
 shared_bash_interrupt { "session": "build" }
 ```
 
+## Settings page
+
+The bundle also ships a browser half (`client.js`), so **Settings → Shared Bash** lists every session in the profile with its status, working directory, command count and last activity. From there you can read the retained output, interrupt a running command, close one session or all of them, open a named session in a chosen directory, and send a command yourself.
+
+It talks to the Host half over the plugin's own JSON API, mounted on the harness web server under `/api/shared-bash` (`sessions`, `output`, `open`, `send`, `interrupt`, `close`). The route owns its request fence because a prefix longer than `/api` outranks the kernel's admission check: a composed `connection` service decides when it exists, otherwise the handler applies the same structural rules (loopback `Host`, no cross-site fetch, `Origin`/`Referer` matching the Host authority, plus the desktop's `dsh-app://app` relay referer). Without a web server the routes never register and the tools keep working headless.
+
 ## How it works
 
 Each session is one `bash -l -s` process with pipes. A command is written to a temporary file inside the session directory and executed as `. file </dev/null`, then the shell prints a random completion sentinel carrying the exit status and the current `$PWD`. That gives three properties:
@@ -78,7 +84,7 @@ Each session is one `bash -l -s` process with pipes. A command is written to a t
 | `maxSessions` | `16` | Concurrent sessions per profile |
 | `env` | `{}` | Extra environment variables for the shell |
 
-Per-session `cwd` accepts POSIX-style paths that the MSYS2 installation owns (`/tmp`, `/home/...`, `/c/Users/...`) and translates them for the Host.
+Per-session `cwd` accepts POSIX-style paths that the MSYS2 installation owns (`/tmp`, `/home/...`, `/c/Users/...`) and translates them for the Host. `shared_bash_open` also enters that directory inside the shell itself: a login shell runs its profile scripts, and MSYS2's end in `$HOME`, so the spawn directory alone does not stick.
 
 ## Limits
 

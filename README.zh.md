@@ -57,6 +57,12 @@ shared_bash_read  { "session": "build", "lines": 200 }
 shared_bash_interrupt { "session": "build" }
 ```
 
+## 设置页面
+
+这个 bundle 还带一个浏览器半边（`client.js`）：**设置 → 共享 Bash** 会列出该 profile 里的所有会话及状态、目录、命令数与最近活动。在这个页面上可以读保留的输出、中断正在跑的命令、关闭单个或全部会话、在指定目录新建命名会话，也能自己发一条命令。
+
+它通过插件自己的 JSON 接口与 Host 半边通信，挂在 harness web 服务器的 `/api/shared-bash` 下（`sessions`、`output`、`open`、`send`、`interrupt`、`close`）。因为比 `/api` 更长的前缀会优先于内核的准入检查，这条路由自带请求围栏：组合里存在 `connection` 服务时由它裁决，否则按同样的结构性规则判断（`Host` 必须是回环地址、拒绝跨站请求、`Origin`/`Referer` 必须与 `Host` 同源，另外放行桌面端 `dsh-app://app` 的转发 Referer）。没有 Web 服务器时路由根本不会注册，工具在无头组合里照常工作。
+
 ## 实现方式
 
 每个会话是一个带管道的 `bash -l -s` 进程。命令写进会话目录里的临时文件，用 `. file </dev/null` 执行，随后 shell 打印一条随机完成哨兵，带上退出码和当时的 `$PWD`。这带来三个性质：
@@ -80,7 +86,7 @@ shared_bash_interrupt { "session": "build" }
 | `maxSessions` | `16` | 每个 profile 的并发会话数 |
 | `env` | `{}` | 追加给 shell 的环境变量 |
 
-单次会话的 `cwd` 接受 MSYS2 安装所拥有的 POSIX 风格路径（`/tmp`、`/home/...`、`/c/Users/...`），插件会转换成 Host 可用的路径。
+单次会话的 `cwd` 接受 MSYS2 安装所拥有的 POSIX 风格路径（`/tmp`、`/home/...`、`/c/Users/...`），插件会转换成 Host 可用的路径。`shared_bash_open` 还会在 shell 内部真正进入该目录：登录 shell 会跑 profile 脚本，而 MSYS2 的那套以 `$HOME` 收尾，只给 spawn 目录是留不住的。
 
 ## 限制
 

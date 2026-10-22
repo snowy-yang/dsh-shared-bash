@@ -365,8 +365,22 @@ function hostPath(input, bashPath) {
   return join(root, input.slice(1).replace(/\//g, '\\'))
 }
 
-function signalProcess(killPath, pid, signal) {
-  try {
+// The inverse direction: a Windows path in the form a Cygwin/MSYS2 shell's `cd`
+// accepts, for the one place that has to speak to the shell rather than to spawn.
+function toPosixPath(value) {
+  if (process.platform !== 'win32') return String(value)
+  const text = String(value).replace(/\\/g, '/')
+  const drive = text.match(/^([A-Za-z]):(\/|$)/)
+  if (drive === null) return text
+  const rest = text.slice(3)
+  return `/${drive[1].toLowerCase()}${rest === '' ? '' : `/${rest}`}`
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`
+}
+
+function signalProcess(killPath, pid, signal) {  try {
     return spawnSync(killPath, [signal, String(pid)], { encoding: 'utf8', windowsHide: true }).status === 0
   } catch {
     return false
@@ -412,8 +426,11 @@ export class SharedBashManager {
 
   async open(options = {}) {
     const name = this.resolveName(options.session)
+    const bashPath = options.bashPath ?? this.bashPath
     const existing = this.sessions.get(name)
     if (existing !== undefined && existing.status === 'running' && !options.recreate) {
+      const cwd = options.cwd === undefined ? undefined : this.#posixCwd(options.cwd, bashPath)
+      if (cwd !== undefined) await this.#enter(existing, cwd)
       return { session: existing, reused: true, probe: undefined }
     }
     if (existing !== undefined) {
@@ -423,7 +440,6 @@ export class SharedBashManager {
     if (this.sessions.size >= this.maxSessions) {
       throw new BashSessionError('TOO_MANY_SESSIONS', `session limit ${this.maxSessions} reached; close one with shared_bash_close`)
     }
-    const bashPath = options.bashPath ?? this.bashPath
     const cwd = options.cwd === undefined ? this.defaultCwd : resolve(this.defaultCwd, hostPath(options.cwd, bashPath))
     if (!existsSync(cwd)) {
       throw new BashSessionError('CWD_NOT_FOUND', `working directory ${JSON.stringify(cwd)} does not exist on this machine`, { cwd })
@@ -448,10 +464,27 @@ export class SharedBashManager {
       const identity = await session.run("printf '__DSH_PID__:%s\\n' \"$$\"", { timeoutMs: 15_000, silent: true })
       const pid = Number(identity.output.match(/__DSH_PID__:(\d+)/)?.[1])
       session.cygwinPid = Number.isInteger(pid) && pid > 0 ? pid : undefined
+      // A login shell runs its profile scripts, and MSYS2's end in $HOME: the
+      // spawn cwd alone does not survive, so an explicit cwd is entered here.
+      if (options.cwd !== undefined) await this.#enter(session, this.#posixCwd(options.cwd, bashPath))
       return { session, reused: false, probe }
     } catch (error) {
       this.close(name)
       throw error
+    }
+  }
+
+  /** Translate one requested working directory into the POSIX form bash's `cd` reads. */
+  #posixCwd(input, bashPath) {
+    const host = resolve(this.defaultCwd, hostPath(input, bashPath))
+    return String(input).startsWith('/') ? String(input) : toPosixPath(host)
+  }
+
+  /** Enter a directory inside an existing session; a failure is a caller error, not a silent no-op. */
+  async #enter(session, cwd) {
+    const result = await session.run(`cd ${shellQuote(cwd)}`, { timeoutMs: 15_000, silent: true })
+    if (result.exitCode !== 0) {
+      throw new BashSessionError('CWD_NOT_FOUND', `cannot enter working directory ${JSON.stringify(cwd)}: ${result.output.trim()}`, { cwd })
     }
   }
 
