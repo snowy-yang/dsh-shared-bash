@@ -1,0 +1,17 @@
+# dsh-shared-bash bundle patch.
+#
+# One Host row mounts the session manager. The tools it registers are global to
+# the profile, so every agent of every session shares the same shells.
+- insert:
+    - id: shared-bash
+      name: 'dsh-shared-bash'
+      config:
+        # bash executable; defaults to MSYS2 bash when C:\msys64 exists.
+        # bashPath: 'C:\msys64\usr\bin\bash.exe'
+        msystem: MSYS
+        # Default foreground wait for one command, in milliseconds.
+        commandTimeoutMs: 120000
+        # Retained output lines per session.
+        maxLines: 4000
+        # Concurrent sessions per profile.
+        maxSessions: 16

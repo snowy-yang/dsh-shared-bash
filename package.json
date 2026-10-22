@@ -1,0 +1,52 @@
+{
+  "name": "dsh-shared-bash",
+  "version": "0.1.0",
+  "description": "tmux-like shared persistent bash sessions for DeepSeek Harness: every agent in a profile can open, drive and read the same shells, keeping cwd, variables and background state between calls.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-bundle",
+    "bash",
+    "terminal",
+    "tmux",
+    "shell",
+    "msys2",
+    "windows"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": "^0.2.1-rc.2"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/snowy-yang/dsh-shared-bash.git"
+  },
+  "bugs": {
+    "url": "https://github.com/snowy-yang/dsh-shared-bash/issues"
+  },
+  "homepage": "https://github.com/snowy-yang/dsh-shared-bash#readme"
+}
