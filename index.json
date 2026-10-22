@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "title": {
+    "en": "snowy-yang DSH plugins",
+    "zh": "snowy-yang 的 DSH 插件"
+  },
+  "description": {
+    "en": "Plugin index for DeepSeek Harness bundles maintained by snowy-yang.",
+    "zh": "snowy-yang 维护的 DeepSeek Harness 插件索引。"
+  },
+  "metadata": {
+    "categories": {
+      "tools": {
+        "title": { "en": "Tools and automation", "zh": "工具与自动化" }
+      }
+    },
+    "labels": {
+      "windows": {
+        "title": { "en": "Windows", "zh": "Windows" }
+      },
+      "shell": {
+        "title": { "en": "Shell", "zh": "Shell" }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-shared-bash",
+      "title": {
+        "en": "Shared Bash Sessions",
+        "zh": "共享 Bash 会话"
+      },
+      "description": {
+        "en": "tmux-like persistent bash sessions shared by every agent in a DSH profile: keep cwd, variables and jobs between calls, hand a live shell from one agent to another.",
+        "zh": "tmux 式的长驻 bash 会话，同一 profile 里所有 agent 共享：调用之间保留 cwd、变量与作业，一个 agent 可以把活着的 shell 交给另一个。"
+      },
+      "author": "snowy-yang",
+      "homepage": "https://github.com/snowy-yang/dsh-shared-bash#readme",
+      "repository": {
+        "url": "https://github.com/snowy-yang/dsh-shared-bash"
+      },
+      "metadata": {
+        "category": "tools",
+        "keywords": ["bash", "tmux", "terminal", "shell", "msys2", "agent-team"],
+        "labels": ["windows", "shell"]
+      },
+      "versions": [
+        {
+          "version": "0.1.0",
+          "publishTimestamp": 1761165000,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/snowy-yang/dsh-shared-bash",
+            "commit": "33cd1a00d814e286a5c51e34af6a1460fff26818"
+          },
+          "engines": {
+            "dsh": "^0.2.1-rc.2"
+          }
+        }
+      ]
+    }
+  ]
+}
