@@ -46,6 +46,18 @@
       },
       "versions": [
         {
+          "version": "0.2.0",
+          "publishTimestamp": 1792682000,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/snowy-yang/dsh-shared-bash",
+            "commit": "d3faae238d5c05082789aa939eb7e4150bd97000"
+          },
+          "engines": {
+            "dsh": "^0.2.1-rc.2"
+          }
+        },
+        {
           "version": "0.1.0",
           "publishTimestamp": 1792674149,
           "source": {
