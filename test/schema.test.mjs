@@ -44,26 +44,25 @@ function sampleObject(spec) {
 
 test('tool schemas compile and validate under the harness runtime', { skip: !enabled }, async () => {
   const tools = await import(new URL(`file://${modulePath.replace(/\\/gu, '/')}`).href)
-  const { parameterSchemaSpecToJsonSchema, valueSchemaSpecToJsonSchema, validateArgs, validateJsonSchemaValue } = tools
+  const { assertSupportedJsonSchema, validateArgs, validateJsonSchemaValue } = tools
   const root = mkdtempSync(join(tmpdir(), 'shared-bash-schema-'))
   const manager = new SharedBashManager({ rootDir: root, spawnTerminal: async () => { throw new Error('not started') } })
   try {
     const built = buildTools(manager)
     assert.equal(built.length, 7)
     for (const tool of built) {
-      // Both conversions call assertSupportedJsonSchema internally.
-      parameterSchemaSpecToJsonSchema(tool.parameters)
-      const output = valueSchemaSpecToJsonSchema(tool.output.schema)
+      // `register()` asserts the output schema exactly as written; `parameters`
+      // is an authoring spec compiled by validateArgs.
+      assertSupportedJsonSchema(tool.output.schema)
 
       const args = {}
       for (const [key, property] of Object.entries(tool.parameters)) {
         if (property.required === true) args[key] = sample(property)
       }
-      // validateArgs compiles the authoring spec itself.
       assert.doesNotThrow(() => validateArgs(tool.parameters, args), tool.name)
 
       const value = sampleObject(tool.output.schema)
-      validateJsonSchemaValue(output, value)
+      validateJsonSchemaValue(tool.output.schema, value)
       const rendered = tool.output.render(args, value)
       assert.ok(Array.isArray(rendered) && rendered.length > 0 && rendered.every(part => part.type === 'text' && typeof part.text === 'string'), tool.name)
     }

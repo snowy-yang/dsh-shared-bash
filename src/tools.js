@@ -39,13 +39,18 @@ function target(exec, args) {
   return args.session_id === undefined || args.session_id === '' ? callerSessionId(exec) : args.session_id
 }
 
-/** Shared output property shapes; required fields carry `required: true` inline. */
-const out = {
-  string: { type: 'string', required: true },
-  integer: { type: 'integer', required: true },
-  boolean: { type: 'boolean', required: true },
-  optionalString: { type: 'string' },
-  optionalInteger: { type: 'integer' },
+/** Property shapes for `output.schema`, which must be raw JSON Schema. */
+const field = {
+  string: { type: 'string' },
+  integer: { type: 'integer' },
+  boolean: { type: 'boolean' },
+}
+
+/** Object-rooted output schema; `register()` validates this exactly as written. */
+function outSchema(properties, required = []) {
+  const schema = { type: 'object', additionalProperties: false, properties }
+  if (required.length > 0) schema.required = required
+  return schema
 }
 
 /**
@@ -65,18 +70,14 @@ export function buildTools(manager) {
         recreate: { type: 'boolean', description: 'Replace an existing terminal for that session instead of reusing it.' },
       },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            session_id: out.string,
-            status: out.string,
-            pid: out.integer,
-            cwd: out.string,
-            reused: out.boolean,
-            startup: out.string,
-          },
-        },
+        schema: outSchema({
+          session_id: field.string,
+          status: field.string,
+          pid: field.integer,
+          cwd: field.string,
+          reused: field.boolean,
+          startup: field.string,
+        }, ['session_id', 'status', 'pid', 'cwd', 'reused', 'startup']),
       },
       async execute(args, exec) {
         const id = target(exec, args)
@@ -102,18 +103,14 @@ export function buildTools(manager) {
         wait_ms: { type: 'integer', description: 'Return the finished result when the command completes within this many milliseconds; otherwise return the running job id. Defaults to 0, which is always asynchronous.' },
       },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            job_id: out.string,
-            session_id: out.string,
-            status: out.string,
-            output: out.string,
-            exit_code: out.optionalInteger,
-            cwd: out.optionalString,
-          },
-        },
+        schema: outSchema({
+          job_id: field.string,
+          session_id: field.string,
+          status: field.string,
+          output: field.string,
+          exit_code: field.integer,
+          cwd: field.string,
+        }, ['job_id', 'session_id', 'status', 'output']),
       },
       async execute(args, exec) {
         const id = target(exec, args)
@@ -140,20 +137,16 @@ export function buildTools(manager) {
         timeout_ms: { type: 'integer', description: 'Maximum time to wait, in milliseconds. Defaults to 600000 (10 minutes).' },
       },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            job_id: out.string,
-            session_id: out.string,
-            status: out.string,
-            output: out.string,
-            exit_code: out.optionalInteger,
-            cwd: out.optionalString,
-            error: out.optionalString,
-            timed_out: out.boolean,
-          },
-        },
+        schema: outSchema({
+          job_id: field.string,
+          session_id: field.string,
+          status: field.string,
+          output: field.string,
+          exit_code: field.integer,
+          cwd: field.string,
+          error: field.string,
+          timed_out: field.boolean,
+        }, ['job_id', 'session_id', 'status', 'output']),
       },
       async execute(args) {
         const result = await manager.wait(args.job_id, args.timeout_ms ?? 600_000)
@@ -179,20 +172,16 @@ export function buildTools(manager) {
         offset: { type: 'integer', description: 'Lines to skip back from the newest line. Defaults to 0.' },
       },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            session_id: out.string,
-            text: out.string,
-            start: out.integer,
-            end: out.integer,
-            total: out.integer,
-            hasMore: out.boolean,
-            busy: out.boolean,
-            cwd: out.string,
-          },
-        },
+        schema: outSchema({
+          session_id: field.string,
+          text: field.string,
+          start: field.integer,
+          end: field.integer,
+          total: field.integer,
+          hasMore: field.boolean,
+          busy: field.boolean,
+          cwd: field.string,
+        }, ['session_id', 'text', 'start', 'end', 'total', 'hasMore', 'busy', 'cwd']),
       },
       execute(args, exec) {
         const id = target(exec, args)
@@ -215,14 +204,10 @@ export function buildTools(manager) {
         'Send a real SIGINT to the foreground process group of a terminal, the way Ctrl-C would. The terminal survives and keeps its state; the running command settles as interrupted.',
       parameters: { session_id: SESSION_PROPERTY },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            session_id: out.string,
-            interrupted: out.boolean,
-          },
-        },
+        schema: outSchema({
+          session_id: field.string,
+          interrupted: field.boolean,
+        }, ['session_id', 'interrupted']),
       },
       async execute(args, exec) {
         const id = target(exec, args)
@@ -239,13 +224,9 @@ export function buildTools(manager) {
         all: { type: 'boolean', description: 'Close every terminal instead of one.' },
       },
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            closed: { type: 'array', required: true, items: { type: 'string' } },
-          },
-        },
+        schema: outSchema({
+          closed: { type: 'array', items: { type: 'string' } },
+        }, ['closed']),
       },
       async execute(args, exec) {
         if (args.all === true) {
@@ -264,29 +245,25 @@ export function buildTools(manager) {
         'List every PTY terminal in this profile with its DSH session id, status, working directory and whether a command is running. Terminals outlive tool calls and are reachable by id, so this is how you discover one to attach to.',
       parameters: {},
       output: {
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            sessions: {
-              type: 'array',
-              required: true,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                properties: {
-                  session_id: out.string,
-                  status: out.string,
-                  pid: out.integer,
-                  cwd: out.string,
-                  busy: out.boolean,
-                  commands: out.integer,
-                  lastActivityAt: out.string,
-                },
+        schema: outSchema({
+          sessions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                session_id: field.string,
+                status: field.string,
+                pid: field.integer,
+                cwd: field.string,
+                busy: field.boolean,
+                commands: field.integer,
+                lastActivityAt: field.string,
               },
+              required: ['session_id', 'status', 'pid', 'cwd', 'busy', 'commands', 'lastActivityAt'],
             },
           },
-        },
+        }, ['sessions']),
       },
       execute() {
         return {
