@@ -1,7 +1,7 @@
 {
   "name": "dsh-shared-bash",
-  "version": "0.2.0",
-  "description": "tmux-like shared persistent bash sessions for DeepSeek Harness: every agent in a profile can open, drive and read the same shells, keeping cwd, variables and background state between calls.",
+  "version": "0.3.0",
+  "description": "Session-keyed persistent PTY bash terminals for DeepSeek Harness: attach to a DSH session's shell by id, run commands as asynchronous jobs, and read or interrupt them later.",
   "type": "module",
   "main": "index.js",
   "exports": {

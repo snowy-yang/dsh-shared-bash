@@ -1,141 +1,109 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { after, test } from 'node:test'
 
-import * as plugin from '../index.js'
+import { SharedBashManager } from '../src/manager.js'
 import { buildTools } from '../src/tools.js'
+import { createFakeTerminalProvider } from './terminal-double.mjs'
 
-const bashPath = process.env.DSH_SHARED_BASH ?? (existsSync('C:\\msys64\\usr\\bin\\bash.exe') ? 'C:\\msys64\\usr\\bin\\bash.exe' : 'bash')
-const skip = bashPath === 'bash' && !existsSync('C:\\msys64\\usr\\bin\\bash.exe') ? 'bash executable not found' : false
+const root = mkdtempSync(join(tmpdir(), 'shared-bash-tools-'))
+const provider = createFakeTerminalProvider()
+const manager = new SharedBashManager({ rootDir: root, spawnTerminal: spec => provider.spawnTerminal(spec) })
+const tools = new Map(buildTools(manager).map(tool => [tool.name, tool]))
+const exec = { agent: { session: { id: 'sess-tools' } }, callId: 'call-1', signal: new AbortController().signal }
 
-function mount() {
-  const registered = []
-  const disposers = []
-  const ctx = {
-    tools: {
-      register(definition) {
-        registered.push(definition)
-        return () => {
-          const index = registered.indexOf(definition)
-          if (index >= 0) registered.splice(index, 1)
-        }
-      },
-    },
-    effect(setup) {
-      const disposer = setup()
-      if (typeof disposer === 'function') disposers.push(disposer)
-      return disposer
-    },
-  }
-  return { ctx, registered, dispose: () => disposers.reverse().forEach((disposer) => disposer()) }
-}
+after(async () => {
+  await manager.dispose()
+  rmSync(root, { recursive: true, force: true })
+})
 
-test('registers the six shared-bash tools with renderable outputs', { skip }, () => {
-  const mounted = mount()
-  plugin.apply(mounted.ctx, { bashPath, rootDir: mkdtempSync(join(tmpdir(), 'dsb-plugin-')), commandTimeoutMs: 20_000 })
-  const names = mounted.registered.map((tool) => tool.name).sort()
-  assert.deepEqual(names, [
-    'shared_bash_close',
-    'shared_bash_interrupt',
-    'shared_bash_list',
-    'shared_bash_open',
-    'shared_bash_read',
-    'shared_bash_send',
+test('registers the seven terminal tools with renderable outputs', () => {
+  assert.deepEqual([...tools.keys()].sort(), [
+    'bash_attach', 'bash_close', 'bash_exec', 'bash_interrupt', 'bash_list', 'bash_read', 'bash_wait',
   ])
-  for (const tool of mounted.registered) {
-    assert.equal(tool.parameters.type, 'object', `${tool.name} parameters are an object schema`)
-    assert.ok(tool.description.length > 40, `${tool.name} has a useful description`)
-    assert.equal(typeof tool.execute, 'function')
-    assert.equal(typeof tool.output.render, 'function')
-    const rendered = tool.output.render({}, sampleValue(tool.name), undefined)
-    assert.equal(rendered[0].type, 'text')
-    assert.equal(typeof rendered[0].text, 'string')
+  for (const [name, tool] of tools) {
+    // Harness authoring style: a flat property map, not a root JSON Schema.
+    assert.equal(typeof tool.parameters, 'object', name)
+    assert.equal(Array.isArray(tool.parameters), false, name)
+    assert.equal(tool.parameters.type, undefined, name)
+    for (const property of Object.values(tool.parameters)) assert.equal(typeof property.type, 'string', name)
+    assert.equal(typeof tool.execute, 'function', name)
+    assert.equal(typeof tool.output.render, 'function', name)
+    const rendered = tool.output.render({}, { session_id: 's', status: 'running', pid: 1, cwd: '/tmp', reused: false, startup: '', text: '', closed: [], sessions: [], interrupted: true, job_id: 'bash-0123456789abcdef', exit_code: 0, output: '', error: '', timed_out: false, start: 0, end: 0, total: 0, hasMore: false, busy: false })
+    assert.ok(Array.isArray(rendered) && rendered[0].type === 'text', name)
   }
-  mounted.dispose()
 })
 
-function sampleValue(name) {
-  switch (name) {
-    case 'shared_bash_open':
-      return { session: 'demo', status: 'running', pid: 1234, cwd: '/home/user', bash: bashPath, msystem: 'MSYS', reused: false, startup: '' }
-    case 'shared_bash_send':
-      return { session: 'demo', exit_code: 0, output: 'hi', running: false, timed_out: false, cwd: '/home/user' }
-    case 'shared_bash_read':
-      return { session: 'demo', text: 'hi', start: 0, end: 1, total: 1, has_more: false, partial: false, status: 'running', busy: false, cwd: '/home/user' }
-    case 'shared_bash_list':
-      return { sessions: [] }
-    case 'shared_bash_interrupt':
-      return { session: 'demo', interrupted: true, killed: [42], status: 'running' }
-    default:
-      return { closed: ['demo'], remaining: 0 }
-  }
-}
+test('the default target is the calling agent\'s session', async () => {
+  const attached = await tools.get('bash_attach').execute({}, exec)
+  assert.equal(attached.session_id, 'sess-tools')
+  assert.equal(attached.status, 'running')
 
-test('drives a real session through the tool surface', { skip }, async () => {
-  const mounted = mount()
-  plugin.apply(mounted.ctx, { bashPath, rootDir: mkdtempSync(join(tmpdir(), 'dsb-tools-')), commandTimeoutMs: 20_000 })
-  const tool = (name) => mounted.registered.find((entry) => entry.name === name)
-
-  const opened = await tool('shared_bash_open').execute({ session: 'e2e', cwd: '/tmp' })
-  assert.equal(opened.session, 'e2e')
-  assert.equal(opened.status, 'running')
-  assert.equal(opened.reused, false)
-
-  const sent = await tool('shared_bash_send').execute({ session: 'e2e', command: 'cd /tmp && COUNT=7; echo "count=$COUNT in $(pwd)"' })
-  assert.equal(sent.exit_code, 0)
-  assert.equal(sent.output, 'count=7 in /tmp')
-
-  const listed = await tool('shared_bash_list').execute({})
-  assert.equal(listed.sessions.length, 1)
-  assert.equal(listed.sessions[0].session, 'e2e')
-  assert.equal(listed.sessions[0].cwd, '/tmp')
-
-  const page = await tool('shared_bash_read').execute({ session: 'e2e', lines: 10 })
-  assert.match(page.text, /count=7/)
-
-  const long = await tool('shared_bash_send').execute({ session: 'e2e', command: 'sleep 20', timeout_ms: 200 })
-  assert.equal(long.running, true)
-  const interrupted = await tool('shared_bash_interrupt').execute({ session: 'e2e' })
-  assert.equal(interrupted.interrupted, true)
-
-  const waitIdle = async () => {
-    const start = Date.now()
-    while (Date.now() - start < 10_000) {
-      const [session] = (await tool('shared_bash_list').execute({})).sessions
-      if (session !== undefined && session.busy === false) return true
-      await new Promise((resolve) => setTimeout(resolve, 50))
-    }
-    return false
-  }
-  assert.equal(await waitIdle(), true, 'session returns to idle after the interrupt')
-  const after = await tool('shared_bash_send').execute({ session: 'e2e', command: 'echo still-here' })
-  assert.equal(after.output, 'still-here')
-
-  mounted.dispose()
+  const listed = tools.get('bash_list').execute({}, exec)
+  assert.deepEqual(listed.sessions.map(entry => entry.session_id), ['sess-tools'])
 })
 
-test('dispose closes every session', { skip }, async () => {
-  const mounted = mount()
-  plugin.apply(mounted.ctx, { bashPath, rootDir: mkdtempSync(join(tmpdir(), 'dsb-dispose-')), commandTimeoutMs: 20_000 })
-  const open = mounted.registered.find((entry) => entry.name === 'shared_bash_open')
-  const list = mounted.registered.find((entry) => entry.name === 'shared_bash_list')
-  await open.execute({ session: 'gone' })
-  assert.equal((await list.execute({})).sessions.length, 1)
-  mounted.dispose()
-  assert.equal(mounted.registered.length, 0)
+test('bash_exec returns a job id and bash_wait collects the result', async () => {
+  const started = await tools.get('bash_exec').execute({ command: 'echo tool-hello' }, exec)
+  assert.match(started.job_id, /^bash-[0-9a-f]{16}$/)
+  assert.equal(started.session_id, 'sess-tools')
+
+  const done = await tools.get('bash_wait').execute({ job_id: started.job_id, timeout_ms: 20_000 }, exec)
+  assert.equal(done.status, 'completed')
+  assert.equal(done.exit_code, 0)
+  assert.match(done.output, /tool-hello/)
+  assert.equal(done.timed_out, false)
 })
 
-test('tool schemas satisfy the harness JSON Schema subset', { skip: !process.env.DSH_TOOLS_MODULE }, async () => {
-  const module = await import(pathToFileURL(process.env.DSH_TOOLS_MODULE).href)
-  const definitions = buildTools({ resolveName: () => 'main', require: () => ({ run: async () => ({}), read: () => ({}), interrupt: async () => ({}), status: 'running' }), list: () => [] })
-  for (const definition of definitions) {
-    module.assertSupportedJsonSchema(definition.parameters)
-    module.assertSupportedJsonSchema(definition.output.schema)
-  }
-  const send = definitions.find((definition) => definition.name === 'shared_bash_send')
-  assert.ok(module.validateJsonSchemaValue(send.parameters, {}, 'arguments').length > 0, 'a call without command is rejected')
-  assert.equal(module.validateJsonSchemaValue(send.parameters, { command: 'echo hi' }, 'arguments').length, 0)
+test('bash_wait reports a timeout without losing the command', async () => {
+  const started = await tools.get('bash_exec').execute({ command: 'sleep 2; echo late' }, exec)
+  const early = await tools.get('bash_wait').execute({ job_id: started.job_id, timeout_ms: 50 }, exec)
+  assert.equal(early.timed_out, true)
+  assert.equal(early.status, 'running')
+
+  const later = await tools.get('bash_wait').execute({ job_id: started.job_id, timeout_ms: 20_000 }, exec)
+  assert.equal(later.status, 'completed')
+  assert.match(later.output, /late/)
+})
+
+test('bash_read exposes scrollback and bash_interrupt targets the shell', async () => {
+  const read = tools.get('bash_read').execute({ lines: 50 }, exec)
+  assert.match(read.text, /tool-hello/)
+
+  const interrupted = await tools.get('bash_interrupt').execute({}, exec)
+  assert.equal(interrupted.session_id, 'sess-tools')
+  assert.equal(typeof interrupted.interrupted, 'boolean')
+})
+
+test('another agent reaches a session by passing its id', async () => {
+  const other = { agent: { session: { id: 'sess-other' } } }
+  const attached = await tools.get('bash_attach').execute({ session_id: 'sess-tools' }, other)
+  assert.equal(attached.session_id, 'sess-tools')
+  assert.equal(attached.reused, true)
+
+  const started = await tools.get('bash_exec').execute({ session_id: 'sess-tools', command: 'echo from-other' }, other)
+  const done = await tools.get('bash_wait').execute({ job_id: started.job_id, timeout_ms: 20_000 }, other)
+  assert.match(done.output, /from-other/)
+})
+
+test('tools without a calling session ask for an explicit id', async () => {
+  await assert.rejects(
+    () => tools.get('bash_exec').execute({ command: 'echo hi' }, {}),
+    error => error.code === 'NO_SESSION_CONTEXT',
+  )
+})
+
+test('an empty command is rejected before the shell sees it', async () => {
+  await assert.rejects(
+    () => tools.get('bash_exec').execute({ command: '   ' }, exec),
+    error => error.code === 'INVALID_COMMAND',
+  )
+})
+
+test('bash_close forgets the terminal', async () => {
+  const closed = await tools.get('bash_close').execute({}, exec)
+  assert.deepEqual(closed.closed, ['sess-tools'])
+  assert.equal(tools.get('bash_list').execute({}, exec).sessions.length, 0)
 })

@@ -1,15 +1,11 @@
-// dsh-shared-bash — tmux-like shared bash sessions for DeepSeek Harness.
+// dsh-shared-bash — persistent PTY bash terminals, one per DSH session.
 //
-// The Host half owns one manager of long-lived bash processes. Every tool it
-// registers is global to the profile, so every agent in every session of this
-// profile sees the same sessions and can keep using a shell someone else left
-// in a useful directory.
-//
-// The web half (client.js) renders a settings page over the JSON routes
-// registered here; the routes pend until a web server is composed, so the same
-// Host half runs headless without a browser.
+// The Host half owns a registry keyed by DSH session id: a terminal outlives
+// tool calls and is reachable by any agent that knows the id, so "connect to the
+// shell from that session" is an explicit act rather than an invisible pool.
+// Commands run through it return a job id and settle asynchronously.
 
-import { BashSessionError, DEFAULT_MSYS2_BASH, SharedBashManager } from './src/sessions.js'
+import { BashSessionError, DEFAULT_MSYS2_BASH, SharedBashManager } from './src/manager.js'
 import { buildTools } from './src/tools.js'
 import { API_PREFIX, createWebHandler } from './src/web.js'
 
@@ -17,7 +13,7 @@ export const name = 'shared-bash'
 export const inject = ['tools']
 
 /**
- * Mount the shared session manager, its tools and (when a web server exists)
+ * Mount the session-keyed PTY registry, its tools and (when a web server exists)
  * the browser-facing API.
  * @param ctx - Cordis context of this plugin row.
  * @param config - Plugin config; see README.
@@ -27,8 +23,12 @@ export function apply(ctx, config) {
     throw new TypeError('shared-bash: config must be an object')
   }
   const manager = new SharedBashManager(config ?? {})
-  ctx.effect(() => () => manager.dispose(), 'shared-bash: sessions')
-  const disposers = buildTools(manager).map((tool) => ctx.tools.register(tool))
+  manager.bindSubprocess(() => (typeof ctx.get === 'function' ? ctx.get('subprocess') : undefined))
+  ctx.effect(() => () => {
+    void manager.dispose()
+  }, 'shared-bash: terminals')
+
+  const disposers = buildTools(manager).map(tool => ctx.tools.register(tool))
   ctx.effect(
     () => () => {
       for (const dispose of disposers) dispose?.()
@@ -38,7 +38,6 @@ export function apply(ctx, config) {
 
   // The web server may be published after this plugin loads, so the route
   // registration waits for the service instead of reading it once at apply.
-  // A bare Cordis context in tests has no fiber helpers; the tools still mount.
   if (typeof ctx.inject === 'function') {
     ctx.inject(['webServer'], (scoped) => {
       const server = scoped.webServer

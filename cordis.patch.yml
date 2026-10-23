@@ -1,7 +1,8 @@
 # dsh-shared-bash bundle patch.
 #
-# One Host row mounts the session manager. The tools it registers are global to
-# the profile, so every agent of every session shares the same shells.
+# One Host row owns a registry of PTY terminals keyed by DSH session id. The tools
+# it registers are global to the profile, so an agent reaches another session's
+# terminal by naming that id.
 - insert:
     - id: shared-bash
       name: 'dsh-shared-bash'
@@ -9,9 +10,14 @@
         # bash executable; defaults to MSYS2 bash when C:\msys64 exists.
         # bashPath: 'C:\msys64\usr\bin\bash.exe'
         msystem: MSYS
-        # Default foreground wait for one command, in milliseconds.
-        commandTimeoutMs: 120000
-        # Retained output lines per session.
+        # Startup working directory for a terminal that is not given one.
+        # cwd: 'C:\proj'
+        # Login shell (`bash -l -i`): MSYS2 PATH and the user's profile apply.
+        login: true
+        # Retained output lines per terminal.
         maxLines: 4000
-        # Concurrent sessions per profile.
+        # Concurrent terminals per profile.
         maxSessions: 16
+        # Reported PTY geometry.
+        cols: 120
+        rows: 30
