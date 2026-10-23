@@ -27,12 +27,12 @@
     {
       "name": "dsh-shared-bash",
       "title": {
-        "en": "Shared Bash Sessions",
-        "zh": "共享 Bash 会话"
+        "en": "Bash Terminals",
+        "zh": "Bash 终端"
       },
       "description": {
-        "en": "tmux-like persistent bash sessions shared by every agent in a DSH profile: keep cwd, variables and jobs between calls, hand a live shell from one agent to another.",
-        "zh": "tmux 式的长驻 bash 会话，同一 profile 里所有 agent 共享：调用之间保留 cwd、变量与作业，一个 agent 可以把活着的 shell 交给另一个。"
+        "en": "Persistent PTY bash terminals keyed by DSH session id: attach to a session's shell by id, run commands as asynchronous jobs, then wait, read or interrupt them.",
+        "zh": "按 DSH 会话 id 寻址的长驻 PTY bash 终端：用会话 id 接入某个会话的 shell，命令以异步 job 执行，随后 wait、read 或中断。"
       },
       "author": "snowy-yang",
       "homepage": "https://github.com/snowy-yang/dsh-shared-bash#readme",
@@ -45,6 +45,18 @@
         "labels": ["windows", "shell"]
       },
       "versions": [
+        {
+          "version": "0.3.0",
+          "publishTimestamp": 1792752028,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/snowy-yang/dsh-shared-bash",
+            "commit": "9d3527a362050ec1388e6324e54f876622bfd4cb"
+          },
+          "engines": {
+            "dsh": "^0.2.1-rc.2"
+          }
+        },
         {
           "version": "0.2.0",
           "publishTimestamp": 1792682000,
