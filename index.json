@@ -51,7 +51,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/snowy-yang/dsh-shared-bash",
-            "commit": "9d3527a362050ec1388e6324e54f876622bfd4cb"
+            "commit": "13fccc0480a1b3c9b14edd9ddecf4a891428391d"
           },
           "engines": {
             "dsh": "^0.2.1-rc.2"
